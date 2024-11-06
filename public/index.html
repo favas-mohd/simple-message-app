@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Chat Application</title>
+    <style>
+        /* General Styling */
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+            padding: 10px;
+        }
+
+        #chat-container {
+            width: 100%;
+            max-width: 900px; /* Increased max width for better laptop view */
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-area {
+            display: flex;
+            flex-direction: row; /* Row layout for laptop view */
+            flex: 1;
+        }
+
+        /* Message List */
+        #messages {
+            list-style-type: none;
+            margin: 0;
+            padding: 10px;
+            height: 200px; /* Fixed height for messages */
+            overflow-y: auto; /* Scrollable message area */
+            border-right: 1px solid #ccc; /* Add border for separation */
+            flex: 3; /* Take more space */
+        }
+
+        li {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f1f1f1;
+            word-wrap: break-word;
+        }
+
+        /* User List */
+        #user-list {
+            list-style-type: none;
+            margin: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            max-height: 400px; /* Limit height for user list */
+            overflow-y: hidden; /* Hide scroll initially */
+            flex: 1; /* Take less space */
+        }
+
+        /* Input Form Styling */
+        form {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background-color: #fff;
+            border-top: 1px solid #ccc;
+        }
+
+        input {
+            width: 75%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        button {
+            width: 20%;
+            padding: 10px;
+            background-color: #4CAF50;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        /* Error Message Styling */
+        .error {
+            color: red;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        /* Username Form */
+        #usernameForm {
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+            background-color: #fff;
+        }
+
+        #usernameInput {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 70%;
+            font-size: 16px;
+        }
+
+        #usernameForm button {
+            margin-left: 10px;
+            padding: 10px;
+            background-color: #4CAF50;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        /* Responsiveness */
+        @media (max-width: 600px) {
+            .chat-area {
+                flex-direction: column; /* Column layout for mobile view */
+            }
+
+            #messages {
+                border-right: none; /* Remove border on mobile */
+                height: auto; /* Allow auto height for messages */
+                max-height: 200px; /* Limit height to show 6 messages approximately */
+                overflow-y: auto; /* Enable scrolling */
+            }
+
+            #user-list {
+                margin: 10px 0; /* Margin for user list in mobile */
+                max-height: 150px; /* Limit height for user list on mobile */
+                overflow-y: auto; /* Allow scrolling on mobile */
+            }
+
+            input {
+                width: 70%;
+            }
+
+            button {
+                width: 25%;
+            }
+
+            #usernameInput {
+                width: 50%;
+            }
+        }
+
+        @media (min-width: 601px) and (max-width: 900px) {
+            /* Styles for tablets */
+            input {
+                width: 60%;
+            }
+
+            button {
+                width: 30%;
+            }
+
+            #usernameInput {
+                width: 60%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div class="chat-area"> <!-- Wrapper for messages and user list -->
+            <h4>online</h4>
+            <ul id="user-list"></ul> <!-- User list section -->
+            <h4>messages</h4>
+            <ul id="messages"></ul> <!-- Message section -->
+        </div>
+        
+        <form id="usernameForm" action="">
+            <input id="usernameInput" autocomplete="off" placeholder="Enter your username" />
+            <button>Join</button>
+        </form>
+        <div class="error" id="error-message" style="display: none;"></div> <!-- Error message container -->
+        <form id="form" action="" style="display:none;">
+            <input id="input" autocomplete="off" placeholder="Type a message..." />
+            <button>Send</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const usernameForm = document.getElementById('usernameForm');
+        const usernameInput = document.getElementById('usernameInput');
+        const form = document.getElementById('form');
+        const input = document.getElementById('input');
+        const messages = document.getElementById('messages');
+        const userList = document.getElementById('user-list'); // Reference to the user list
+        const errorMessage = document.getElementById('error-message'); // Reference to the error message
+        let username = '';
+        let messageHistory = []; // Store messages for history
+        const maxMessages = 70; // Maximum messages to display
+
+        usernameForm.addEventListener('submit', function(e) {
+            e.preventDefault(); // Prevent form submission
+            if (usernameInput.value.length === 5) {
+                username = usernameInput.value; // Set username
+                socket.emit('set username', username); // Emit username to the server
+                usernameForm.style.display = 'none'; // Hide username form
+                form.style.display = 'flex'; // Show chat form
+                errorMessage.style.display = 'none'; // Hide error message
+            } else {
+                errorMessage.textContent = 'Username must be exactly 5 characters long.';
+                errorMessage.style.display = 'block'; // Show error message
+            }
+            console.log("Username set to:", username);
+        });
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault(); // Prevent form submission
+            if (input.value) {
+                socket.emit('chat message', { user: username, text: input.value }); // Send message with username
+                input.value = ''; // Clear input field
+            }
+        });
+
+        // Listen for incoming messages
+        socket.on('chat message', function(data) {
+            messageHistory.push(data); // Add new message to history
+
+            // Limit the message history to the last maxMessages
+            if (messageHistory.length > maxMessages) {
+                messageHistory.shift(); // Remove the oldest message
+            }
+
+            updateMessages(); // Update message display
+            // Scroll to the bottom of the message list
+            messages.scrollTop = messages.scrollHeight;
+        });
+
+        // Listen for user list updates
+        socket.on('user list', function(users) {
+            userList.innerHTML = ''; // Clear existing user list
+            users.forEach(user => {
+                const li = document.createElement('li');
+                li.textContent = user; // Display username
+                userList.appendChild(li);
+            });
+
+            // Conditionally make the user list scrollable
+            if (users.length > 3) {
+                userList.style.overflowY = 'auto'; // Enable scroll if more than 3 users
+            } else {
+                userList.style.overflowY = 'hidden'; // Disable scroll
+            }
+        });
+
+        // Function to update displayed messages
+        function updateMessages() {
+            messages.innerHTML = ''; // Clear current messages
+            messageHistory.forEach(data => {
+                const li = document.createElement('li');
+                li.textContent = `${data.user}: ${data.text}`; // Format message
+                messages.appendChild(li); // Add message to the list
+            });
+        }
+    </script>
+</body>
+</html>
